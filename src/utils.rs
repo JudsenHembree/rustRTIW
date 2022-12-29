@@ -256,12 +256,6 @@ impl Clone for Camera {
     }
 }
 
-impl Clone for Pixels {
-    fn clone(&self) -> Pixels {
-        *self
-    }
-}
-
 // copies
 impl Copy for Vec3 {}
 impl Copy for Ray {}

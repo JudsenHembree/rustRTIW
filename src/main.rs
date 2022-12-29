@@ -1,15 +1,16 @@
 // ignore unused func
 #![allow(dead_code)]
 // Imports
-//use indicatif::*;
-use std::thread;
+use indicatif::*;
+use std::thread::*;
 
 // modules
 mod utils;
 
 // Constants
 const ASPECT_RATIO: f32 = 16.0 / 9.0;
-const IMAGE_WIDTH: u32 = 5000;
+// make it bigger for parallel to actually matter
+const IMAGE_WIDTH: u32 = 100;
 const IMAGE_HEIGHT: u32 = (IMAGE_WIDTH as f32 / ASPECT_RATIO) as u32;
 
 fn set_pixel(x: usize, y: usize, color: utils::Vec3, pixels: &mut utils::Pixels) {
@@ -72,7 +73,8 @@ fn main() {
     let mut img = utils::Pixels::new(IMAGE_WIDTH as usize, IMAGE_HEIGHT as usize);
 
     // Loop through the pixels a couple times for warmup
-    for _ in 0..3 {
+    eprintln!("Performing warmup");
+    for _ in (0..3).progress() {
         for j in (0..IMAGE_HEIGHT).rev() {
             for i in 0..IMAGE_WIDTH {
                 let u = i as f32 / (IMAGE_WIDTH - 1) as f32;
@@ -84,10 +86,10 @@ fn main() {
         }
     }
 
-
     let mut sequential_runs: Vec<std::time::Duration> = vec![];
     let mut parallel_runs: Vec<std::time::Duration> = vec![];
-    for _ in 0..10 {
+    eprintln!("Collecting times for sequential");
+    for _ in (0..10).progress() {
         let start = std::time::Instant::now();
         for j in (0..IMAGE_HEIGHT).rev() {
             for i in 0..IMAGE_WIDTH {
@@ -103,22 +105,25 @@ fn main() {
 
     }
     // render in parallel
-    for _ in 0..10 {
+    eprintln!("Collecting times for parallel");
+    for _ in (0..10).progress() {
         let start = std::time::Instant::now();
-            for j in (0..IMAGE_HEIGHT).rev() {
-                let mut jclone = img.pixels[j as usize].clone();
-                thread::scope(|s| {
-                    s.spawn(move || {
-                        for i in 0..IMAGE_WIDTH {
-                            let u = i as f32 / (IMAGE_WIDTH - 1) as f32;
-                            let v = j as f32 / (IMAGE_HEIGHT - 1) as f32;
-                            let ray = camera.get_ray(u, v);
-                            let pixel = ray_color(ray);
-                            jclone[i as usize] = pixel;
-                        }
-                    });
-                });
-            }
+        let mut joins = Vec::new();
+        for j in (0..IMAGE_HEIGHT).rev() {
+            let mut jclone = img.pixels[j as usize].clone();
+            joins.push(spawn(move || {
+                for i in 0..IMAGE_WIDTH {
+                    let u = i as f32 / (IMAGE_WIDTH - 1) as f32;
+                    let v = j as f32 / (IMAGE_HEIGHT - 1) as f32;
+                    let ray = camera.get_ray(u, v);
+                    let pixel = ray_color(ray);
+                    jclone[i as usize] = pixel;
+                }
+            }));
+        }
+        for join in joins{
+            join.join();
+        }
         let end = std::time::Instant::now();
         parallel_runs.push(end - start);
     }
